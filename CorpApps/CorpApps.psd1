@@ -63,7 +63,6 @@
 
     # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
     NestedModules = @(
-        '.\ActiveDirectory.ps1',
         '.\Compress-Alias.ps1',
         '.\Compress-Archive.ps1',
         '.\ConvertFrom-Base64.ps1',
