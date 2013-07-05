@@ -1,0 +1,19 @@
+<Types> 
+    <Type> 
+        <Name>System.String</Name> 
+        <Members> 
+            <ScriptProperty> 
+            <Name>ToBase64String</Name> 
+                <GetScriptBlock> 
+                    [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($this)) 
+                </GetScriptBlock> 
+            </ScriptProperty> 
+            <ScriptProperty> 
+            <Name>FromBase64String</Name> 
+                <GetScriptBlock> 
+                    [System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String($this)) 
+                </GetScriptBlock> 
+            </ScriptProperty> 
+        </Members> 
+    </Type> 
+</Types>
