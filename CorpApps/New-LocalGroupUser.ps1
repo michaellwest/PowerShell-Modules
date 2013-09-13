@@ -12,3 +12,4 @@ function New-LocalGroupUser {
     } else {
         $group.Add("WinNT://$ComputerName/$UserName")
     }
+}
