@@ -86,6 +86,11 @@ function Invoke-SqlCommand {
         [string]$Username,
 
         [string]$Password,
+        
+        [ValidateNotNull()]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]
+        $Credential = [System.Management.Automation.PSCredential]::Empty,
 
         [System.Data.CommandType]$CommandType = [System.Data.CommandType]::Text,
 
@@ -115,6 +120,10 @@ function Invoke-SqlCommand {
             $Connection = New-Object System.Data.SqlClient.SQLConnection
             if($Username -and $Password) {
                 $Connection.ConnectionString = "Server=$($Server);Database=$($Database);User Id=$($Username);Password=$($Password);"
+            } elseif($Credential) {
+                $Credential.Password.MakeReadOnly()
+                $Connection.Credential = New-Object System.Data.SqlClient.SqlCredential ($Credential.Username,$Credential.Password)
+                $Connection.ConnectionString = "Server=$($Server);Database=$($Database);"
             } else {
                 $Connection.ConnectionString = "Server=$($Server);Database=$($Database);Integrated Security=SSPI;"
             }
