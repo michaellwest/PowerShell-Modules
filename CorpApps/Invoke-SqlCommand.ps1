@@ -1,85 +1,86 @@
+<#
+    .SYNOPSIS
+        Executes an SQL statement. Executes using Windows Authentication unless the Username and Password are provided.
+
+    .PARAMETER Server
+        The SQL Server instance name.
+
+    .PARAMETER Database
+        The SQL Server database name where the query will be executed.
+
+    .PARAMETER Timeout
+        The connection timeout.
+
+    .PARAMETER Connection
+        The System.Data.SqlClient.SQLConnection instance used to connect.
+
+    .PARAMETER Username
+        The SQL Authentication Username.
+
+    .PARAMETER Password
+        The SQL Authentication Password.
+
+    .PARAMETER CommandType
+        The System.Data.CommandType value specifying Text or StoredProcedure.
+
+    .PARAMETER Query
+        The SQL query to execute.
+
+     .PARAMETER Path
+        The path to an SQL script.
+
+    .PARAMETER Parameters
+        Hashtable containing the key value pairs used to generate as collection of System.Data.SqlParameter.
+
+    .PARAMETER As
+        Specifies how to return the result.
+
+        PSCustomObject
+         - Returns the result set as an array of System.Management.Automation.PSCustomObject objects.
+        DataSet
+         - Returns the result set as an System.Data.DataSet object.
+        DataTable
+         - Returns the result set as an System.Data.DataTable object.
+        DataRow
+         - Returns the result set as an array of System.Data.DataRow objects.
+        Scalar
+         - Returns the first column of the first row in the result set. Should be used when a value with no column name is returned (i.e. SELECT COUNT(*) FROM Test.Sample).
+        NonQuery
+         - Returns the number of rows affected. Should be used for INSERT, UPDATE, and DELETE.
+
+    .EXAMPLE
+        PS C:\> Invoke-SqlCommand -Server "DATASERVER" -Database "Web" -Query "SELECT TOP 1 * FROM Test.Sample"
+
+        datetime2         : 1/17/2013 8:46:22 AM
+        ID                : 202507
+        uniqueidentifier1 : 1d0cf1c0-9fb1-4e21-9d5a-b8e9365400fc
+        bool1             : False
+        datetime1         : 1/17/2013 12:00:00 AM
+        double1           : 1
+        varchar1          : varchar11
+        decimal1          : 1
+        int1              : 1
+
+        Returned the first row as a System.Management.Automation.PSCustomObject.
+
+    .EXAMPLE
+        PS C:\> Invoke-SqlCommand -Server "DATASERVER" -Database "Web" -Query "SELECT COUNT(*) FROM Test.Sample" -As Scalar
+
+        9544            
+#>
 function Invoke-SqlCommand {
-    <#
-        .SYNOPSIS
-            Executes an SQL statement. Executes using Windows Authentication unless the Username and Password are provided.
-
-        .PARAMETER Server
-            The SQL Server instance name.
-
-        .PARAMETER Database
-            The SQL Server database name where the query will be executed.
-
-        .PARAMETER Timeout
-            The connection timeout.
-
-        .PARAMETER Connection
-            The System.Data.SqlClient.SQLConnection instance used to connect.
-
-        .PARAMETER Username
-            The SQL Authentication Username.
-
-        .PARAMETER Password
-            The SQL Authentication Password.
-
-        .PARAMETER CommandType
-            The System.Data.CommandType value specifying Text or StoredProcedure.
-
-        .PARAMETER Query
-            The SQL query to execute.
-
-         .PARAMETER Path
-            The path to an SQL script.
-
-        .PARAMETER Parameters
-            Hashtable containing the key value pairs used to generate as collection of System.Data.SqlParameter.
-
-        .PARAMETER As
-            Specifies how to return the result.
-
-            PSCustomObject
-             - Returns the result set as an array of System.Management.Automation.PSCustomObject objects.
-            DataSet
-             - Returns the result set as an System.Data.DataSet object.
-            DataTable
-             - Returns the result set as an System.Data.DataTable object.
-            DataRow
-             - Returns the result set as an array of System.Data.DataRow objects.
-            Scalar
-             - Returns the first column of the first row in the result set. Should be used when a value with no column name is returned (i.e. SELECT COUNT(*) FROM Test.Sample).
-            NonQuery
-             - Returns the number of rows affected. Should be used for INSERT, UPDATE, and DELETE.
-
-        .EXAMPLE
-            PS C:\> Invoke-SqlCommand -Server "DATASERVER" -Database "Web" -Query "SELECT TOP 1 * FROM Test.Sample"
-
-            datetime2         : 1/17/2013 8:46:22 AM
-            ID                : 202507
-            uniqueidentifier1 : 1d0cf1c0-9fb1-4e21-9d5a-b8e9365400fc
-            bool1             : False
-            datetime1         : 1/17/2013 12:00:00 AM
-            double1           : 1
-            varchar1          : varchar11
-            decimal1          : 1
-            int1              : 1
-
-            Returned the first row as a System.Management.Automation.PSCustomObject.
-
-        .EXAMPLE
-            PS C:\> Invoke-SqlCommand -Server "DATASERVER" -Database "Web" -Query "SELECT COUNT(*) FROM Test.Sample" -As Scalar
-
-            9544            
-    #>
     [CmdletBinding(DefaultParameterSetName="Default")]
     param(
-        [Parameter(Mandatory=$true, Position=0)]
+        [Parameter(Mandatory=$true, Position=0,ParameterSetName="Server")]
         [string]$Server,
 
-        [Parameter(Mandatory=$true, Position=1)]
+        [Parameter(Mandatory=$true, Position=1,ParameterSetName="Server")]
         [string]$Database,
 
-        [Parameter(Mandatory=$false, Position=2)]
+        [Parameter(Mandatory=$false, Position=2,ParameterSetName="Server")]
         [int]$Timeout=30,
-
+        
+        [Parameter(Mandatory=$true,ParameterSetName="Connection")]
         [System.Data.SqlClient.SQLConnection]$Connection,
 
         [string]$Username,
@@ -122,8 +123,14 @@ function Invoke-SqlCommand {
                 $Connection.Add_InfoMessage([System.Data.SqlClient.SqlInfoMessageEventHandler] { Write-Verbose "$($_)"} )
             }
         }
-
-        if(-not ($Connection.State -like "Open")) { try { $Connection.Open() } catch [Exception] { throw $_ } }
+        
+        $closeConnection = $false
+        if(-not ($Connection.State -like "Open")) { 
+            try { 
+                $Connection.Open()
+                $closeConnection = $true
+            } catch [Exception] { throw $_ }
+        }
     }
 
     process {
@@ -132,30 +139,33 @@ function Invoke-SqlCommand {
         $command.CommandType = $CommandType
         if($Parameters) {
             foreach ($p in $Parameters.Keys) {
-                $command.Parameters.AddWithValue($p, $Parameters[$p]) | Out-Null
+                $command.Parameters.AddWithValue($p, $Parameters[$p]) > $null
             }
         }
 
         $scriptBlock = {
-            $result = @()
+            $watch = [System.Diagnostics.StopWatch]::StartNew()
+            $result = [System.Collections.ArrayList]@()
             $reader = $command.ExecuteReader()
             if($reader) {
-                $counter = $reader.FieldCount
-                $columns = @()
-                for ($i = 0; $i -lt $counter; $i++) {
-                    $columns += $reader.GetName($i)
+                $fieldCount = $reader.FieldCount
+                $columns = [System.Collections.ArrayList]@()
+                for ($i = 0; $i -lt $fieldCount; $i++) {
+                    $columns.Add($reader.GetName($i)) > $null
                 }
 
                 if($reader.HasRows) {
                     while ($reader.Read()) {
-                        $row = @{}
-                        for ($i = 0; $i -lt $counter; $i++) {
+                        $row = [ordered]@{}
+                        for ($i = 0; $i -lt $fieldCount; $i++) {
                             $row[$columns[$i]] = $reader.GetValue($i)
                         }
-                        $result += [PSCustomObject]$row
+                        $result.Add([PSCustomObject]$row) > $null
                     }
                 }
             }
+            $watch.Stop()
+            Write-Verbose "ExecuteReader completed in $([math]::Round($watch.ElapsedMilliseconds / 1000, 3)) seconds"
             $result
         }
 
@@ -178,7 +188,7 @@ function Invoke-SqlCommand {
                         $scriptBlock = {
                             $ds = New-Object System.Data.DataSet
                             $da = New-Object System.Data.SqlClient.SqlDataAdapter($command)
-                            $da.Fill($ds) | Out-Null
+                            $da.Fill($ds) > $null
                             switch($As) {
                                 "DataSet" { $result = $ds }
                                 "DataTable" { $result = $ds.Tables }
@@ -191,13 +201,18 @@ function Invoke-SqlCommand {
             }
         }
 
+        Write-Verbose "Executing database query"
         $result = Invoke-Command -ScriptBlock $ScriptBlock
         $command.Parameters.Clear()
     }
 
     end {
-        if($createConnection) { $Connection.Close() }
+        if($closeConnection) {
+            Write-Verbose "Closing database connection"
+            $Connection.Close()
+        }
 
+        Write-Verbose "Writing results to the host"
         $result
     }
 }
